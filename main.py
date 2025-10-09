@@ -1178,7 +1178,10 @@ async def text_handler(bot: Client, m: Message):
         elif raw_text2 == "1080":
             res = "1920x1080" 
         elif raw_text2 == "64":
-            res = "MP3 - 64 kbps
+            res = "MP3 - 64 kbps"
+
+        elif raw_text2 == "641":
+            res = "44100Hz_64kbps"
         else: 
             res = "UN"
     except Exception:
