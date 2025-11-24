@@ -774,6 +774,12 @@ async def txt_handler(bot: Client, m: Message):
 
                 url = f"{base_clean}*{signature}"
 
+            
+            elif "competishun-googli.vercel.app" in url:
+                response = requests.get(url, timeout=40)
+                url = response.json()['signedUrl']
+
+
             elif "https://static-wsb.classx.co.in/" in url:
                 clean_url = url.split("?")[0]
 
@@ -933,7 +939,6 @@ async def txt_handler(bot: Client, m: Message):
             try:
                 cc = (
     f"<b>|🇮🇳| {cleaned_name1}</b>\n\n"
-    f"<b>😎 ℚ𝕦𝕒𝕝𝕚𝕥𝕪 ➠ {raw_text97}p</b>\n\n"
     f"<b>🧿 𝐁𝐀𝐓𝐂𝐇 ➤ {b_name}</b>\n\n"
     f"<b>ChapterId > {raw_text65}</b>"
 )
@@ -1243,6 +1248,10 @@ async def text_handler(bot: Client, m: Message):
                 clean_url = clean_url.replace("https://static-wsb.classx.co.in", "https://appx-wsb-gcp-mcdn.akamai.net.in")
 
                 url = clean_url
+
+            elif "competishun-googli.vercel.app" in url:
+                response = requests.get(url, timeout=40)
+                url = response.json()['signedUrl']
 
             elif "https://static-db.classx.co.in/" in url:
                 if "*" in url:
