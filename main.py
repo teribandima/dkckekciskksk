@@ -235,7 +235,7 @@ async def handle_json_file(client: Client, message: Message):
     else:
         prefix_str = "🌟𝐂𝐎𝐔𝐑𝐒𝐄 ➤ Unknown🌟"
 
-    input_filename = f"temp_{user_id}_{document.file_id[:5]}.json"
+    input_filename = os.path.join("downloads", f"temp_{user_id}_{document.file_id[:5]}.json")
     
     try:
         await client.download_media(message=document, file_name=input_filename)
