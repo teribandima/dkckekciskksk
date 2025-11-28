@@ -871,32 +871,73 @@ async def txt_handler(bot: Client, m: Message):
 
             # Title processing
             title = links[i][0]
-            raw_text97 = ""
+            raw_text901 = ""
+            raw_text902 = ""
             name1 = ""
-            raw_text65 = ""
-
-            # Check for both delimiters and the correct format
-            if "🌚" in title and "💀" in title:
+            raw_text903 = ""
+            raw_text904 = ""
+            # 1. Check for the NEW Complex Format first
+            if "🌟" in title and "🌚" in title and "💀" in title and "🤬" in title:
                 try:
-                    # Split on 🌚 to isolate raw_text97 and the rest
+                    # Extract raw_text901 (Between stars)
+                    parts_star = title.split("🌟")
+                    if len(parts_star) >= 3:
+                        raw_text901 = parts_star[1].strip()
+
+                    # Extract raw_text902 (Between moons)
+                    parts_moon = title.split("🌚")
+                    if len(parts_moon) >= 3:
+                        raw_text902 = parts_moon[1].strip()
+            
+                        # Get the part after the second moon (contains name, skull, etc.)
+                        remaining_after_moon = parts_moon[2]
+
+                        # Extract name1 (Between moon and skull)
+                        parts_skull = remaining_after_moon.split("💀")
+                        if len(parts_skull) >= 2:
+                            name1 = parts_skull[0].strip()
+                
+                            # Get the part after skull (contains 903 and 904 with curses)
+                            remaining_after_skull = parts_skull[1]
+                
+                            # Extract raw_text903 and raw_text904 (Using curses)
+                            # Format: {903}🤬{904}🤬
+                            parts_curse = remaining_after_skull.split("🤬")
+                            if len(parts_curse) >= 2:
+                                raw_text903 = parts_curse[0].strip() # Text before first curse
+                                raw_text904 = parts_curse[1].strip() # Text between two curses
+                            else:
+                                raw_text903 = remaining_after_skull.strip()
+
+                        else:
+                            name1 = remaining_after_moon.strip()
+                except IndexError:
+                    name1 = title.strip()
+
+            # 2. Check for OLD Format (Fallback logic if stars/curses are missing)
+            elif "🌚" in title and "💀" in title:
+                try:
                     parts = title.split("🌚")
                     if len(parts) >= 3:
-                        raw_text97 = parts[1].strip()  # Extract raw_text97
-                        # Split the remaining part on 💀 to get name1 and raw_text65
+                        # Mapping old variables if needed, or just extracting name
+                        # raw_text97 = parts[1].strip() 
                         remaining = parts[2].split("💀")
-                        if len(remaining) >= 3:
-                            name1 = remaining[0].strip()  # Extract name1
-                            raw_text65 = remaining[1].strip()  # Extract raw_text65
+                        if len(remaining) >= 2:
+                            name1 = remaining[0].strip()
+                            # raw_text65 = remaining[1].strip()
                         else:
-                            name1 = remaining[0].strip() if remaining else title.strip()
+                            name1 = remaining[0].strip()
                 except IndexError:
-                    # Fallback in case of malformed title
                     name1 = title.strip()
+
+            # 3. No delimiters found
             else:
-                # Fallback if delimiters are missing
                 name1 = title.strip()
 
+            # Cleaning Name
             cleaned_name1 = name1.replace("(", "[").replace(")", "]").replace("_", "").replace("\t", "").replace(":", "").replace("/", "").replace("+", "").replace("#", "").replace("|", "").replace("@", "").replace("*", "").replace(".", "").replace("https", "").replace("http", "").strip()
+
+            # Final Name String
             name = f'[𝗛𝗔𝗖𝗞𝗛𝗘𝗜𝗦𝗧😈]{cleaned_name1[:60]}'
             
             if "visionias" in url:
@@ -1007,7 +1048,7 @@ async def txt_handler(bot: Client, m: Message):
                             query_params = video_url.split('?')[1] if '?' in video_url else ''
 
                             # Construct new m3u8 URL
-                            new_url = f"{base_path}hls/{raw_text97}/main.m3u8" + (f"?{query_params}" if query_params else '')
+                            new_url = f"{base_path}hls/{raw_text901}/main.m3u8" + (f"?{query_params}" if query_params else '')
                             new_url = new_url.replace(
                                 "https://sec-prod-mediacdn.pw.live",
                                 "https://anonymouspwplayer-0e5a3f512dec.herokuapp.com/sec-prod-mediacdn.pw.live"
@@ -1038,10 +1079,10 @@ async def txt_handler(bot: Client, m: Message):
                         elif video_url.startswith("https://next"):
                             # ✅ Logic for next links
                             if video_url.endswith("master.mpd"):
-                                url = video_url.replace("master.mpd", f"hls/{raw_text97}/main.m3u8")
+                                url = video_url.replace("master.mpd", f"hls/{raw_text901}/main.m3u8")
                             else:
                                 base_url = video_url.rsplit("/", 1)[0]  # Remove any trailing segment
-                                url = f"{base_url}/hls/{raw_text97}/main.m3u8"
+                                url = f"{base_url}/hls/{raw_text901}/main.m3u8"
                             print(f"Final URL: {url}")
 
                         else:
