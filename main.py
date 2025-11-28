@@ -130,6 +130,161 @@ async def set_log_channel_cmd(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ Error: {str(e)}")
 
+# ==============================================================================
+#                 BULK JSON MERGER & CONVERTER (PYROGRAM)
+# ==============================================================================
+
+@bot.on_message(filters.command("bulk") & auth_filter)
+async def bulk_command(client: Client, message: Message):
+    user_id = message.from_user.id
+    bulk_sessions[user_id] = []  # Initialize session
+    await message.reply_text(
+        "🚀 **Bulk Mode ON!**\n\n"
+        "Ab `.json` files bhejna shuru karo.\n"
+        "Main unhe **Date-wise (Internal Sort)** karunga aur **Sequence** mein jodunga.\n"
+        "Jab sab bhej do, tab **/done** dabana. 💀"
+    )
+
+@bot.on_message(filters.command("done") & auth_filter)
+async def done_command(client: Client, message: Message):
+    user_id = message.from_user.id
+    
+    if user_id not in bulk_sessions:
+        await message.reply_text("⚠️ Bhai pehle /bulk command se start to karo!")
+        return
+
+    all_lines = bulk_sessions[user_id]
+    
+    if not all_lines:
+        await message.reply_text("⚠️ Tumne koi JSON file bheji hi nahi! 😐")
+        del bulk_sessions[user_id]
+        return
+
+    # Output filename
+    output_filename = f"merged_batch_{user_id}.txt"
+    
+    try:
+        # Writing merged data
+        with open(output_filename, 'w', encoding='utf-8') as f:
+            f.write("\n".join(all_lines))
+        
+        await message.reply_document(
+            document=output_filename,
+            file_name="merged_output.txt",
+            caption=f"✅ **Merged Successfully!**\n💀 **Total Lines:** {len(all_lines)}\n\n__Sequence & Date Sort Maintained__"
+        )
+    except Exception as e:
+        await message.reply_text(f"❌ Error during merging: {e}")
+    finally:
+        if os.path.exists(output_filename):
+            os.remove(output_filename)
+        # Clear session
+        if user_id in bulk_sessions:
+            del bulk_sessions[user_id]
+
+@bot.on_message(filters.document & auth_filter)
+async def handle_json_file(client: Client, message: Message):
+    # Sirf .json files ko handle karega
+    if not message.document.file_name.endswith('.json'):
+        return # Ignore other files (let other handlers take care of .txt etc)
+
+    user_id = message.from_user.id
+    document = message.document
+    caption = message.caption or ""
+    
+    status_msg = await message.reply_text("⏳ **Processing JSON...**")
+
+    # 1. Parse Header from Caption
+    batch_match = re.search(r"Batch Name:\s*(.*)", caption)
+    course_match = re.search(r"Course Name:\s*(.*)", caption)
+
+    prefix_str = ""
+    if batch_match:
+        prefix_str = f"🌟𝐁𝐀𝐓𝐂𝐇 ➤ {batch_match.group(1).strip()}🌟"
+    elif course_match:
+        prefix_str = f"🌟𝐂𝐎𝐔𝐑𝐒𝐄 ➤ {course_match.group(1).strip()}🌟"
+    else:
+        prefix_str = "🌟𝐂𝐎𝐔𝐑𝐒𝐄 ➤ Unknown🌟"
+
+    # Download Path
+    input_filename = f"temp_{user_id}_{document.file_id[:5]}.json"
+    
+    try:
+        await client.download_media(message=document, file_name=input_filename)
+
+        with open(input_filename, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # 2. INTRA-FILE SORTING (Date Wise)
+        # Sirf is file ke lectures ko arrange karega
+        try:
+            data.sort(key=lambda x: x.get('live_at', ''))
+        except:
+            pass 
+
+        file_lines = []
+
+        for item in data:
+            class_url = item.get('class_url', '').strip()
+            slides_url = item.get('slides_url', '').strip()
+            
+            # 3. Replacement Logic (Class Cancelled -> Image)
+            if class_url == "Class Cancelled": class_url = "https://optech.jpg"
+            if slides_url == "Class Cancelled": slides_url = "https://optech.jpg"
+
+            # 4. Offline/Online Indicator
+            raw_offline = item.get('is_offline', False)
+            # Pyrogram mein safe string conversion
+            offline_str = "🌚🟢🌚" if str(raw_offline).strip().lower() == 'true' else "🌚🔴🌚"
+
+            class_name = item.get('class_name', 'Unknown Class')
+            teacher_name = item.get('teacher_name', 'Unknown Teacher')
+            live_at_time = item.get('live_at_time', '')
+
+            # 5. Formatting Lines
+            if class_url:
+                line = f"{prefix_str}{offline_str}{class_name}💀{teacher_name}🤬{live_at_time}🤬 : {class_url}"
+                file_lines.append(line)
+            
+            if slides_url:
+                line = f"{prefix_str}{offline_str}{class_name}💀{teacher_name}🤬{live_at_time}🤬 : {slides_url}"
+                file_lines.append(line)
+
+        # 6. Decision: Bulk or Single
+        if user_id in bulk_sessions:
+            # Bulk Mode: Add to memory
+            bulk_sessions[user_id].extend(file_lines)
+            await status_msg.edit(
+                f"📥 **Added & Sorted:** `{document.file_name}`\n"
+                f"Lines: {len(file_lines)}\n"
+                f"Aur bhejo ya **/done** dabao."
+            )
+        else:
+            # Single Mode: Send File Immediately
+            if file_lines:
+                output_filename = f"extracted_{user_id}.txt"
+                with open(output_filename, 'w', encoding='utf-8') as f:
+                    f.write("\n".join(file_lines))
+                
+                final_name = document.file_name.replace('.json', '.txt')
+                await message.reply_document(
+                    document=output_filename,
+                    file_name=final_name,
+                    caption=f"💀 **Single File Processed**\n__Sorted Date-wise internally.__"
+                )
+                if os.path.exists(output_filename):
+                    os.remove(output_filename)
+                await status_msg.delete()
+            else:
+                await status_msg.edit("⚠️ Is JSON file mein koi valid URL nahi mila.")
+
+    except Exception as e:
+        await status_msg.edit(f"❌ Error: {str(e)}")
+    
+    finally:
+        if os.path.exists(input_filename):
+            os.remove(input_filename)
+
 @bot.on_message(filters.command("getlog") & filters.private)
 async def get_log_channel_cmd(client: Client, message: Message):
     """Get current log channel info"""
