@@ -134,32 +134,53 @@ async def set_log_channel_cmd(client: Client, message: Message):
 # ==============================================================================
 #                 BULK JSON MERGER & CONVERTER (PYROGRAM)
 # ==============================================================================
-
-
+# ==============================================================================
+#                 BULK JSON MERGER (IST DATE FIX - COMPLETE)
+# ==============================================================================
+# IST Timezone (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 def format_date(iso_str):
     """
-    Input: 2019-12-29T15:30:00+00:00
-    Output: 29-Dec-2019 (03:30PM)
+    Input: 2025-06-07T12:30:00+00:00
+    Output: 07-June-2025 (06:00PM) [IST]
     """
     if not iso_str:
-        return ""
+        return "Unknown Date"
+    
     try:
-        # Clean string
-        iso_str = iso_str.strip()
+        # Clean and convert string
+        iso_str = str(iso_str).strip()
         
         # Handle Z for UTC
         if iso_str.endswith('Z'):
             iso_str = iso_str.replace('Z', '+00:00')
-            
+        
         # Parse ISO format
         dt = datetime.fromisoformat(iso_str)
         
-        # Format: 29-Dec-2019 (03:30PM)
-        return dt.strftime("%d-%b-%Y (%I:%M%p)")
-    except:
-        # Agar date kharab hai toh waisa hi return kardo
-        return iso_str
+        # Convert to IST
+        dt_ist = dt.astimezone(IST)
+        
+        # Month full names
+        months = {
+            1: "January", 2: "Feburary", 3: "March", 4: "April",
+            5: "May", 6: "June", 7: "July", 8: "August",
+            9: "September", 10: "October", 11: "November", 12: "December"
+        }
+        
+        day = dt_ist.day
+        month = months[dt_ist.month]
+        year = dt_ist.year
+        time_12hr = dt_ist.strftime("%I:%M%p")  # 06:00PM
+        
+        # Final Format: 07-June-2025 (06:00PM)
+        return f"{day:02d}-{month}-{year} ({time_12hr})"
+        
+    except Exception as e:
+        print(f"Date Parse Error: {e} for input: {iso_str}")
+        return "Invalid Date"
+
 
 @bot.on_message(filters.command("bulk") & filters.private)
 async def bulk_command(client: Client, message: Message):
@@ -168,11 +189,13 @@ async def bulk_command(client: Client, message: Message):
     await message.reply_text(
         "🚀 **Bulk Mode ON!**\n\n"
         "JSON files bhejo.\n"
-        "✅ **Date Format:** 29-Dec-2019 (03:30PM)\n"
+        "✅ **Date Format:** 07-June-2025 (06:00PM)\n"
+        "✅ **Timezone:** IST (Indian Time)\n"
         "✅ **Sorted:** Date-wise\n"
         "✅ **Merged:** Sequential\n\n"
         "Done ke liye: **/done**"
     )
+
 
 @bot.on_message(filters.command("done") & filters.private)
 async def done_command(client: Client, message: Message):
@@ -195,7 +218,7 @@ async def done_command(client: Client, message: Message):
         await message.reply_document(
             document=output_filename,
             file_name="merged_output.txt",
-            caption=f"✅ **Merged Successfully!**\n💀 **Total Lines:** {len(all_lines)}\n__Time Format Fixed__"
+            caption=f"✅ **Merged Successfully!**\n💀 **Total Lines:** {len(all_lines)}\n🇮🇳 **IST Time Applied**"
         )
     except Exception as e:
         await message.reply_text(f"❌ Error: {e}")
@@ -204,6 +227,7 @@ async def done_command(client: Client, message: Message):
             os.remove(output_filename)
         if user_id in bulk_sessions:
             del bulk_sessions[user_id]
+
 
 @bot.on_message(filters.document & filters.private)
 async def handle_json_file(client: Client, message: Message):
@@ -219,7 +243,7 @@ async def handle_json_file(client: Client, message: Message):
         global bulk_sessions
         bulk_sessions = {}
     
-    status_msg = await message.reply_text("⏳ **Formatting Dates...**")
+    status_msg = await message.reply_text("⏳ **Converting to IST Format...**")
 
     # 1. Prefix Extraction
     batch_match = re.search(r"Batch Name:\s*(.*)", caption)
@@ -243,7 +267,7 @@ async def handle_json_file(client: Client, message: Message):
 
         # 2. Internal Sorting (Using ISO date)
         try:
-            data.sort(key=lambda x: x.get('live_at') or x.get('live_at_time', ''))
+            data.sort(key=lambda x: x.get('live_at_time') or x.get('live_at', ''))
         except:
             pass 
 
@@ -254,8 +278,10 @@ async def handle_json_file(client: Client, message: Message):
             slides_url = item.get('slides_url', '').strip()
             
             # 3. Replacement
-            if class_url == "Class Cancelled": class_url = "https://optech.jpg"
-            if slides_url == "Class Cancelled": slides_url = "https://optech.jpg"
+            if class_url == "Class Cancelled": 
+                class_url = "https://optech.jpg"
+            if slides_url == "Class Cancelled": 
+                slides_url = "https://optech.jpg"
 
             # 4. Offline/Online
             raw_offline = item.get('is_offline', False)
@@ -264,16 +290,16 @@ async def handle_json_file(client: Client, message: Message):
             class_name = item.get('class_name', 'Unknown Class')
             teacher_name = item.get('teacher_name', 'Unknown Teacher')
             
-            # 5. 🔥 DATE FIX LOGIC 🔥
-            # Pehle live_at_time check karega, agar nahi mila to live_at check karega
+            # 5. 🔥 DATE FIX LOGIC (IST CONVERSION) 🔥
             raw_time = item.get('live_at_time') or item.get('live_at', '')
             
-            # Function call karke readable banayega
+            # Convert to readable IST format
             formatted_time = format_date(raw_time)
+            
+            print(f"DEBUG: {raw_time} => {formatted_time}")  # Debug line
 
             # 6. Formatting
             if class_url:
-                # Format: ...🤬29-Dec-2019 (03:30PM)🤬...
                 line = f"{prefix_str}{offline_str}{class_name}💀{teacher_name}🤬{formatted_time}🤬 : {class_url}"
                 file_lines.append(line)
             
@@ -287,6 +313,7 @@ async def handle_json_file(client: Client, message: Message):
             await status_msg.edit(
                 f"📥 **Added:** `{document.file_name}`\n"
                 f"✅ **Processed:** {len(file_lines)} lines\n"
+                f"🇮🇳 **IST Format Applied**\n\n"
                 f"Aur bhejo ya **/done** dabao."
             )
         else:
@@ -299,7 +326,7 @@ async def handle_json_file(client: Client, message: Message):
                 await message.reply_document(
                     document=output_filename,
                     file_name=final_name,
-                    caption=f"💀 **Single File Processed**\n__Date format fixed.__"
+                    caption=f"💀 **Single File Processed**\n🇮🇳 **IST Time: {formatted_time}**"
                 )
                 if os.path.exists(output_filename):
                     os.remove(output_filename)
@@ -309,10 +336,13 @@ async def handle_json_file(client: Client, message: Message):
 
     except Exception as e:
         await status_msg.edit(f"❌ Error: {str(e)}")
+        print(f"Full Error: {e}")  # Console debug
     
     finally:
         if os.path.exists(input_filename):
             os.remove(input_filename)
+
+
     
 @bot.on_message(filters.command("getlog") & filters.private)
 async def get_log_channel_cmd(client: Client, message: Message):
