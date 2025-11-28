@@ -134,7 +134,7 @@ async def set_log_channel_cmd(client: Client, message: Message):
 #                 BULK JSON MERGER & CONVERTER (PYROGRAM)
 # ==============================================================================
 
-@bot.on_message(filters.command("bulk") & auth_filter)
+@bot.on_message(filters.command("bulk") & filters.private)
 async def bulk_command(client: Client, message: Message):
     user_id = message.from_user.id
     bulk_sessions[user_id] = []  # Initialize session
@@ -145,7 +145,7 @@ async def bulk_command(client: Client, message: Message):
         "Jab sab bhej do, tab **/done** dabana. 💀"
     )
 
-@bot.on_message(filters.command("done") & auth_filter)
+@bot.on_message(filters.command("done") & filters.private)
 async def done_command(client: Client, message: Message):
     user_id = message.from_user.id
     
@@ -182,7 +182,7 @@ async def done_command(client: Client, message: Message):
         if user_id in bulk_sessions:
             del bulk_sessions[user_id]
 
-@bot.on_message(filters.document & auth_filter)
+@bot.on_message(filters.document & filters.private)
 async def handle_json_file(client: Client, message: Message):
     # Sirf .json files ko handle karega
     if not message.document.file_name.endswith('.json'):
