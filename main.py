@@ -135,60 +135,59 @@ async def set_log_channel_cmd(client: Client, message: Message):
 #                 BULK JSON MERGER & CONVERTER (PYROGRAM)
 # ==============================================================================
 
-def format_readable_date(iso_date):
+
+
+def format_date(iso_str):
     """
-    Converts '2025-05-28T14:30:20+00:00' -> '28-May-2025 (02:30PM)'
+    Input: 2019-12-29T15:30:00+00:00
+    Output: 29-Dec-2019 (03:30PM)
     """
-    if not iso_date:
+    if not iso_str:
         return ""
     try:
-        iso_date = iso_date.strip()
-        dt = datetime.fromisoformat(iso_date)
-        # %I=Hour, %M=Minute, %p=AM/PM
-        # Result: 28-May-2025 (02:30PM)
-        return dt.strftime("%d-%b-%Y (%I:%M%p)") 
-    except Exception:
-        return iso_date 
+        # Clean string
+        iso_str = iso_str.strip()
+        
+        # Handle Z for UTC
+        if iso_str.endswith('Z'):
+            iso_str = iso_str.replace('Z', '+00:00')
+            
+        # Parse ISO format
+        dt = datetime.fromisoformat(iso_str)
+        
+        # Format: 29-Dec-2019 (03:30PM)
+        return dt.strftime("%d-%b-%Y (%I:%M%p)")
+    except:
+        # Agar date kharab hai toh waisa hi return kardo
+        return iso_str
 
 @bot.on_message(filters.command("bulk") & filters.private)
 async def bulk_command(client: Client, message: Message):
     user_id = message.from_user.id
-    
-    if 'bulk_sessions' not in globals():
-        global bulk_sessions
-        bulk_sessions = {}
-        
     bulk_sessions[user_id] = []
     await message.reply_text(
         "🚀 **Bulk Mode ON!**\n\n"
-        "Files bhejo. Main unhe merge karunga.\n"
-        "✅ **Sorted:** Date wise (Lecture 1, 2...)\n"
-        "✅ **Format:** 28-May-2025 (02:30PM)\n"
-        "✅ **Minutes Included**\n\n"
-        "Jab ho jaye toh **/done** dabana. 💀"
+        "JSON files bhejo.\n"
+        "✅ **Date Format:** 29-Dec-2019 (03:30PM)\n"
+        "✅ **Sorted:** Date-wise\n"
+        "✅ **Merged:** Sequential\n\n"
+        "Done ke liye: **/done**"
     )
 
 @bot.on_message(filters.command("done") & filters.private)
 async def done_command(client: Client, message: Message):
     user_id = message.from_user.id
     
-    if 'bulk_sessions' not in globals():
-        global bulk_sessions
-        bulk_sessions = {}
-
     if user_id not in bulk_sessions:
-        await message.reply_text("⚠️ Pehle /bulk se start karo!")
+        await message.reply_text("⚠️ /bulk command se start karo!")
         return
 
     all_lines = bulk_sessions[user_id]
-    
     if not all_lines:
-        await message.reply_text("⚠️ Koi file nahi mili! 😐")
-        del bulk_sessions[user_id]
+        await message.reply_text("⚠️ Koi file nahi mili!")
         return
 
     output_filename = f"merged_batch_{user_id}.txt"
-    
     try:
         with open(output_filename, 'w', encoding='utf-8') as f:
             f.write("\n".join(all_lines))
@@ -196,7 +195,7 @@ async def done_command(client: Client, message: Message):
         await message.reply_document(
             document=output_filename,
             file_name="merged_output.txt",
-            caption=f"✅ **Merged Successfully!**\n💀 **Total Lines:** {len(all_lines)}\n\n__Time formatted with Minutes (02:30PM)__"
+            caption=f"✅ **Merged Successfully!**\n💀 **Total Lines:** {len(all_lines)}\n__Time Format Fixed__"
         )
     except Exception as e:
         await message.reply_text(f"❌ Error: {e}")
@@ -215,15 +214,14 @@ async def handle_json_file(client: Client, message: Message):
     document = message.document
     caption = message.caption or ""
     
+    # Ensure session
     if 'bulk_sessions' not in globals():
         global bulk_sessions
         bulk_sessions = {}
-
-    is_bulk = user_id in bulk_sessions
     
-    status_msg = await message.reply_text("⏳ **Processing...**")
+    status_msg = await message.reply_text("⏳ **Formatting Dates...**")
 
-    # 1. Parse Header
+    # 1. Prefix Extraction
     batch_match = re.search(r"Batch Name:\s*(.*)", caption)
     course_match = re.search(r"Course Name:\s*(.*)", caption)
 
@@ -243,9 +241,9 @@ async def handle_json_file(client: Client, message: Message):
         with open(input_filename, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        # 2. Internal Sorting
+        # 2. Internal Sorting (Using ISO date)
         try:
-            data.sort(key=lambda x: x.get('live_at', ''))
+            data.sort(key=lambda x: x.get('live_at') or x.get('live_at_time', ''))
         except:
             pass 
 
@@ -255,23 +253,27 @@ async def handle_json_file(client: Client, message: Message):
             class_url = item.get('class_url', '').strip()
             slides_url = item.get('slides_url', '').strip()
             
-            # 3. Replacement Logic
+            # 3. Replacement
             if class_url == "Class Cancelled": class_url = "https://optech.jpg"
             if slides_url == "Class Cancelled": slides_url = "https://optech.jpg"
 
-            # 4. Offline/Online Logic
+            # 4. Offline/Online
             raw_offline = item.get('is_offline', False)
             offline_str = "🌚🟢🌚" if str(raw_offline).strip().lower() == 'true' else "🌚🔴🌚"
 
             class_name = item.get('class_name', 'Unknown Class')
             teacher_name = item.get('teacher_name', 'Unknown Teacher')
             
-            # 5. TIME FORMATTING (Added Minutes)
-            raw_time = item.get('live_at_time', '')
-            formatted_time = format_readable_date(raw_time) 
+            # 5. 🔥 DATE FIX LOGIC 🔥
+            # Pehle live_at_time check karega, agar nahi mila to live_at check karega
+            raw_time = item.get('live_at_time') or item.get('live_at', '')
+            
+            # Function call karke readable banayega
+            formatted_time = format_date(raw_time)
 
-            # 6. Create Lines
+            # 6. Formatting
             if class_url:
+                # Format: ...🤬29-Dec-2019 (03:30PM)🤬...
                 line = f"{prefix_str}{offline_str}{class_name}💀{teacher_name}🤬{formatted_time}🤬 : {class_url}"
                 file_lines.append(line)
             
@@ -279,12 +281,12 @@ async def handle_json_file(client: Client, message: Message):
                 line = f"{prefix_str}{offline_str}{class_name}💀{teacher_name}🤬{formatted_time}🤬 : {slides_url}"
                 file_lines.append(line)
 
-        # 7. Final Logic
-        if is_bulk:
+        # 7. Bulk Decision
+        if user_id in bulk_sessions:
             bulk_sessions[user_id].extend(file_lines)
             await status_msg.edit(
                 f"📥 **Added:** `{document.file_name}`\n"
-                f"✅ **Extracted:** {len(file_lines)} lines\n"
+                f"✅ **Processed:** {len(file_lines)} lines\n"
                 f"Aur bhejo ya **/done** dabao."
             )
         else:
@@ -297,13 +299,13 @@ async def handle_json_file(client: Client, message: Message):
                 await message.reply_document(
                     document=output_filename,
                     file_name=final_name,
-                    caption=f"💀 **Processed Successfully**\n__Time: {formatted_time} format__"
+                    caption=f"💀 **Single File Processed**\n__Date format fixed.__"
                 )
                 if os.path.exists(output_filename):
                     os.remove(output_filename)
                 await status_msg.delete()
             else:
-                await status_msg.edit("⚠️ Invalid JSON or Empty Data.")
+                await status_msg.edit("⚠️ Empty or Invalid JSON.")
 
     except Exception as e:
         await status_msg.edit(f"❌ Error: {str(e)}")
@@ -311,7 +313,7 @@ async def handle_json_file(client: Client, message: Message):
     finally:
         if os.path.exists(input_filename):
             os.remove(input_filename)
-
+    
 @bot.on_message(filters.command("getlog") & filters.private)
 async def get_log_channel_cmd(client: Client, message: Message):
     """Get current log channel info"""
