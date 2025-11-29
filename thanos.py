@@ -572,7 +572,7 @@ async def send_vid(bot: Client, m: Message, cc, filename, thumb, name, prog, cha
                     part_dur = int(duration(part))
                     part_num = idx + 1
                     total_parts = len(parts)
-                    part_caption = f"{cc}\n\n<b>✂️Part {part_num} of {total_parts}</b>"
+                    part_caption = f"{cc}<b>✂️Lecture Splitted Part {part_num} of {total_parts}</b>"
                     part_filename = f"{name}_Part{part_num}.mp4"
 
                     upload_msg = await m.reply_text(f"📤 Uploading Part {part_num}/{total_parts}...")
