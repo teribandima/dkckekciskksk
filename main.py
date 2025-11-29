@@ -394,9 +394,9 @@ async def handle_json_file(client: Client, message: Message):
             
             # 5. Replacement
             if class_url == "Class Cancelled": 
-                class_url = "https://optech.jpg"
+                class_url = "https://i.ibb.co/CK82gFfG/x.jpg"
             if slides_url == "Class Cancelled": 
-                slides_url = "https://optech.jpg"
+                slides_url = "https://i.ibb.co/CK82gFfG/x.jpg"
 
             # 6. Offline/Online
             raw_offline = item.get('is_offline', False)
