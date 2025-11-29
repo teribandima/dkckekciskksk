@@ -137,34 +137,55 @@ async def set_log_channel_cmd(client: Client, message: Message):
 # ==============================================================================
 #                 BULK JSON MERGER (IST DATE FIX - COMPLETE)
 # ==============================================================================
-# IST Timezone (UTC+5:30)
-IST = timezone(timedelta(hours=5, minutes=30))
+# ==============================================================================
+#                 BULK JSON MERGER (Python 3.6+ Compatible)
+# ==============================================================================
 
 def format_date(iso_str):
     """
     Input: 2025-06-07T12:30:00+00:00
     Output: 07-June-2025 (06:00PM) [IST]
+    Python 3.6+ Compatible
     """
     if not iso_str:
         return "Unknown Date"
     
     try:
-        # Clean and convert string
+        # Clean string
         iso_str = str(iso_str).strip()
         
         # Handle Z for UTC
         if iso_str.endswith('Z'):
             iso_str = iso_str.replace('Z', '+00:00')
         
-        # Parse ISO format
-        dt = datetime.fromisoformat(iso_str)
+        # Parse date-time part (ignore timezone for now)
+        # Format: 2022-10-06T13:45:00+00:00
+        dt_str = iso_str[:19]  # Takes "2022-10-06T13:45:00"
+        dt = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S")
         
-        # Convert to IST
-        dt_ist = dt.astimezone(IST)
+        # Parse timezone offset
+        if '+' in iso_str:
+            tz_part = iso_str.split('+')[1]  # "00:00"
+            tz_sign = 1
+        elif iso_str.count('-') > 2:  # Negative timezone like -05:00
+            tz_part = iso_str.split('-')[-1]
+            tz_sign = -1
+        else:
+            tz_part = "00:00"
+            tz_sign = 1
+        
+        # Convert timezone string to timedelta
+        tz_hours, tz_mins = map(int, tz_part.split(':'))
+        tz_offset = timedelta(hours=tz_sign * tz_hours, minutes=tz_sign * tz_mins)
+        
+        # Subtract original timezone and add IST (+5:30)
+        dt_utc = dt - tz_offset  # Convert to UTC first
+        ist_offset = timedelta(hours=5, minutes=30)
+        dt_ist = dt_utc + ist_offset  # Convert to IST
         
         # Month full names
         months = {
-            1: "January", 2: "Feburary", 3: "March", 4: "April",
+            1: "January", 2: "February", 3: "March", 4: "April",
             5: "May", 6: "June", 7: "July", 8: "August",
             9: "September", 10: "October", 11: "November", 12: "December"
         }
@@ -172,7 +193,25 @@ def format_date(iso_str):
         day = dt_ist.day
         month = months[dt_ist.month]
         year = dt_ist.year
-        time_12hr = dt_ist.strftime("%I:%M%p")  # 06:00PM
+        
+        hour = dt_ist.hour
+        minute = dt_ist.minute
+        
+        # Convert to 12-hour format
+        if hour == 0:
+            hour_12 = 12
+            period = "AM"
+        elif hour < 12:
+            hour_12 = hour
+            period = "AM"
+        elif hour == 12:
+            hour_12 = 12
+            period = "PM"
+        else:
+            hour_12 = hour - 12
+            period = "PM"
+        
+        time_12hr = f"{hour_12:02d}:{minute:02d}{period}"
         
         # Final Format: 07-June-2025 (06:00PM)
         return f"{day:02d}-{month}-{year} ({time_12hr})"
@@ -326,7 +365,7 @@ async def handle_json_file(client: Client, message: Message):
                 await message.reply_document(
                     document=output_filename,
                     file_name=final_name,
-                    caption=f"💀 **Single File Processed**\n🇮🇳 **IST Time: {formatted_time}**"
+                    caption=f"💀 **Single File Processed**\n🇮🇳 **IST Format Applied**"
                 )
                 if os.path.exists(output_filename):
                     os.remove(output_filename)
@@ -341,8 +380,6 @@ async def handle_json_file(client: Client, message: Message):
     finally:
         if os.path.exists(input_filename):
             os.remove(input_filename)
-
-
     
 @bot.on_message(filters.command("getlog") & filters.private)
 async def get_log_channel_cmd(client: Client, message: Message):
