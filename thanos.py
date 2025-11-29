@@ -26,8 +26,6 @@ from urllib.parse import urljoin
 from vars import *  # Add this import
 from db import Database
 
-
-
 def get_duration(filename):
     """Get video duration with error handling"""
     try:
@@ -137,6 +135,7 @@ def duration(filename):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
     return float(result.stdout)
+    
 
 
 def get_mps_and_keys(api_url):
@@ -573,7 +572,7 @@ async def send_vid(bot: Client, m: Message, cc, filename, thumb, name, prog, cha
                     part_dur = int(duration(part))
                     part_num = idx + 1
                     total_parts = len(parts)
-                    part_caption = f"{cc}\n\n📦 Part {part_num} of {total_parts}"
+                    part_caption = f"[📦{part_num}/{total_parts}] {cc}"
                     part_filename = f"{name}_Part{part_num}.mp4"
 
                     upload_msg = await m.reply_text(f"📤 Uploading Part {part_num}/{total_parts}...")
@@ -614,9 +613,7 @@ async def send_vid(bot: Client, m: Message, cc, filename, thumb, name, prog, cha
                 raise Exception(f"Upload failed at part {idx + 1}: {str(e)}")
 
             # ✅ Final messages
-            if len(parts) > 1:
-                await m.reply_text("✅ Large video successfully uploaded in multiple parts!")
-
+            
             # Cleanup after split
             await reply.delete(True)
             await reply1.delete(True)
