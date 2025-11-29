@@ -141,11 +141,15 @@ async def set_log_channel_cmd(client: Client, message: Message):
 #                 BULK JSON MERGER (Python 3.6+ Compatible)
 # ==============================================================================
 
+# ==============================================================================
+#                 BULK JSON MERGER (Manual Parsing - 100% Working)
+# ==============================================================================
+
 def format_date(iso_str):
     """
     Input: 2025-06-07T12:30:00+00:00
     Output: 07-June-2025 (06:00PM) [IST]
-    Python 3.6+ Compatible
+    Manual parsing - No datetime methods
     """
     if not iso_str:
         return "Unknown Date"
@@ -158,66 +162,102 @@ def format_date(iso_str):
         if iso_str.endswith('Z'):
             iso_str = iso_str.replace('Z', '+00:00')
         
-        # Parse date-time part (ignore timezone for now)
-        # Format: 2022-10-06T13:45:00+00:00
-        dt_str = iso_str[:19]  # Takes "2022-10-06T13:45:00"
-        dt = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S")
+        # Manual parsing: 2022-10-06T13:45:00+00:00
+        # Split by 'T'
+        parts = iso_str.split('T')
+        date_part = parts[0]  # "2022-10-06"
+        time_part = parts[1] if len(parts) > 1 else "00:00:00+00:00"
+        
+        # Parse date: YYYY-MM-DD
+        year, month, day = date_part.split('-')
+        year = int(year)
+        month = int(month)
+        day = int(day)
+        
+        # Parse time: HH:MM:SS+00:00 or HH:MM:SS-05:00
+        time_clean = time_part.split('+')[0].split('-')[0]  # Remove timezone
+        hour, minute, second = time_clean.split(':')
+        hour = int(hour)
+        minute = int(minute)
         
         # Parse timezone offset
-        if '+' in iso_str:
-            tz_part = iso_str.split('+')[1]  # "00:00"
+        if '+' in time_part:
+            tz_str = time_part.split('+')[1]
             tz_sign = 1
-        elif iso_str.count('-') > 2:  # Negative timezone like -05:00
-            tz_part = iso_str.split('-')[-1]
+        elif time_part.count('-') > 0:
+            tz_str = time_part.split('-')[-1]
             tz_sign = -1
         else:
-            tz_part = "00:00"
+            tz_str = "00:00"
             tz_sign = 1
         
-        # Convert timezone string to timedelta
-        tz_hours, tz_mins = map(int, tz_part.split(':'))
-        tz_offset = timedelta(hours=tz_sign * tz_hours, minutes=tz_sign * tz_mins)
+        tz_parts = tz_str.split(':')
+        tz_hours = int(tz_parts[0])
+        tz_mins = int(tz_parts[1]) if len(tz_parts) > 1 else 0
         
-        # Subtract original timezone and add IST (+5:30)
-        dt_utc = dt - tz_offset  # Convert to UTC first
-        ist_offset = timedelta(hours=5, minutes=30)
-        dt_ist = dt_utc + ist_offset  # Convert to IST
+        # Convert to UTC first (subtract original timezone)
+        total_offset_mins = tz_sign * (tz_hours * 60 + tz_mins)
+        minute_utc = minute - total_offset_mins
+        hour_utc = hour
         
-        # Month full names
+        # Handle minute overflow/underflow
+        while minute_utc >= 60:
+            minute_utc -= 60
+            hour_utc += 1
+        while minute_utc < 0:
+            minute_utc += 60
+            hour_utc -= 1
+        
+        # Handle hour overflow/underflow
+        while hour_utc >= 24:
+            hour_utc -= 24
+            day += 1
+        while hour_utc < 0:
+            hour_utc += 24
+            day -= 1
+        
+        # Add IST offset (+5:30)
+        minute_ist = minute_utc + 30
+        hour_ist = hour_utc + 5
+        
+        # Handle overflow again
+        if minute_ist >= 60:
+            minute_ist -= 60
+            hour_ist += 1
+        if hour_ist >= 24:
+            hour_ist -= 24
+            day += 1
+        
+        # Month names
         months = {
             1: "January", 2: "February", 3: "March", 4: "April",
             5: "May", 6: "June", 7: "July", 8: "August",
             9: "September", 10: "October", 11: "November", 12: "December"
         }
         
-        day = dt_ist.day
-        month = months[dt_ist.month]
-        year = dt_ist.year
-        
-        hour = dt_ist.hour
-        minute = dt_ist.minute
+        month_name = months.get(month, "Unknown")
         
         # Convert to 12-hour format
-        if hour == 0:
+        if hour_ist == 0:
             hour_12 = 12
             period = "AM"
-        elif hour < 12:
-            hour_12 = hour
+        elif hour_ist < 12:
+            hour_12 = hour_ist
             period = "AM"
-        elif hour == 12:
+        elif hour_ist == 12:
             hour_12 = 12
             period = "PM"
         else:
-            hour_12 = hour - 12
+            hour_12 = hour_ist - 12
             period = "PM"
         
-        time_12hr = f"{hour_12:02d}:{minute:02d}{period}"
-        
-        # Final Format: 07-June-2025 (06:00PM)
-        return f"{day:02d}-{month}-{year} ({time_12hr})"
+        # Format output: 07-June-2025 (06:00PM)
+        return f"{day:02d}-{month_name}-{year} ({hour_12:02d}:{minute_ist:02d}{period})"
         
     except Exception as e:
         print(f"Date Parse Error: {e} for input: {iso_str}")
+        import traceback
+        traceback.print_exc()
         return "Invalid Date"
 
 
@@ -297,7 +337,7 @@ async def handle_json_file(client: Client, message: Message):
         prefix_str = "🌟𝐂𝐎𝐔𝐑𝐒𝐄 ➤ Unknown🌟"
 
     input_filename = os.path.join("downloads", f"temp_{user_id}_{document.file_id[:5]}.json")
-    
+
     try:
         await client.download_media(message=document, file_name=input_filename)
 
@@ -335,7 +375,7 @@ async def handle_json_file(client: Client, message: Message):
             # Convert to readable IST format
             formatted_time = format_date(raw_time)
             
-            print(f"DEBUG: {raw_time} => {formatted_time}")  # Debug line
+            print(f"✅ SUCCESS: {raw_time} => {formatted_time}")
 
             # 6. Formatting
             if class_url:
@@ -375,11 +415,12 @@ async def handle_json_file(client: Client, message: Message):
 
     except Exception as e:
         await status_msg.edit(f"❌ Error: {str(e)}")
-        print(f"Full Error: {e}")  # Console debug
+        print(f"Full Error: {e}")
     
     finally:
         if os.path.exists(input_filename):
             os.remove(input_filename)
+
     
 @bot.on_message(filters.command("getlog") & filters.private)
 async def get_log_channel_cmd(client: Client, message: Message):
