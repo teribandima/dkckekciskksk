@@ -29,29 +29,81 @@ from db import Database
 
 
 def get_duration(filename):
-    result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries",
-         "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", filename],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT
-    )
-    return float(result.stdout)
+    """Get video duration with error handling"""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries",
+             "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", filename],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        duration_str = result.stdout.strip()
+        if duration_str and duration_str != 'N/A':
+            return float(duration_str)
+        else:
+            return 0.0
+    except Exception as e:
+        print(f"⚠️ Duration error: {e}")
+        return 0.0
+
+def human_readable_size(size, decimal_places=2):
+    for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB']:
+        if size < 1024.0:
+            return f"{size:.{decimal_places}f}{unit}"
+        size /= 1024.0
+    return f"{size:.{decimal_places}f}PiB"
 
 def split_large_video(file_path, max_size_mb=1900):
+    """
+    1. Renames input file to .mkv (to fix container issues).
+    2. Splits using -c copy (Super Fast).
+    3. Output is .mkv (Error Free).
+    """
+    if not os.path.exists(file_path):
+        print(f"❌ File not found: {file_path}")
+        return []
+
+    # --- STEP 1: EXTENSION FIX ---
+    # Agar file .mp4 hai lekin asal mein WebM data hai, to usse .mkv rename kar do
+    # Taki FFmpeg confuse na ho.
+    base_name = file_path.rsplit(".", 1)[0]
+    proper_input_path = f"{base_name}.mkv"
+    
+    if file_path != proper_input_path:
+        print(f"🔄 Renaming input to MKV for safe splitting...")
+        os.rename(file_path, proper_input_path)
+        file_path = proper_input_path
+
+    # --- STEP 2: CALCULATIONS ---
     size_bytes = os.path.getsize(file_path)
     max_bytes = max_size_mb * 1024 * 1024
 
     if size_bytes <= max_bytes:
-        return [file_path]  # No splitting needed
+        return [file_path]
 
-    duration = get_duration(file_path)
-    parts = ceil(size_bytes / max_bytes)
+    # Duration check
+    try:
+        res = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path],
+            capture_output=True, text=True
+        )
+        duration = float(res.stdout.strip())
+    except:
+        duration = size_bytes / (1024 * 1024) # Fallback
+
+    parts = math.ceil(size_bytes / max_bytes)
     part_duration = duration / parts
-    base_name = file_path.rsplit(".", 1)[0]
+    
     output_files = []
+    print(f"📦 Splitting into {parts} parts (MKV Mode)...")
 
+    # --- STEP 3: SPLITTING ---
     for i in range(parts):
-        output_file = f"{base_name}_part{i+1}.mp4"
+        # ✅ Output MKV hi hona chahiye agar input WebM/VP9 hai
+        output_file = f"{base_name}_part{i+1}.mkv"
+        
+        # Pure Stream Copy Command (No Error)
         cmd = [
             "ffmpeg", "-y",
             "-i", file_path,
@@ -60,13 +112,24 @@ def split_large_video(file_path, max_size_mb=1900):
             "-c", "copy",
             output_file
         ]
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if os.path.exists(output_file):
-            output_files.append(output_file)
+
+        print(f"✂️ Cutting Part {i+1}/{parts}...")
+        
+        try:
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
+            
+            if os.path.exists(output_file) and os.path.getsize(output_file) > 1024:
+                print(f"✅ Part {i+1} Created: {output_file}")
+                output_files.append(output_file)
+            else:
+                print(f"❌ Part {i+1} failed (Empty File)")
+
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error in Part {i+1}: {e}")
 
     return output_files
 
-
+    
 def duration(filename):
     result = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
                              "format=duration", "-of",
