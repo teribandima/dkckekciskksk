@@ -1280,6 +1280,40 @@ async def txt_handler(bot: Client, m: Message):
             elif "d1d34p8vz63oiq" in url or "sec1.pw.live" in url:
                 url = f"https://anonymouspwplayer-b99f57957198.herokuapp.com/pw?url={url}?token={raw_text4}"
 
+            # Yahan add karein naya logic
+            elif url.startswith("https://uamedia"):
+                try:
+                    # Pehle original URL check karte hain (thoda sa download karke XML error dekhne ke liye)
+                    r = requests.get(url, stream=True)
+                    is_original_failed = False
+                    
+                    # Agar status 200 nahi hai ya andar XML Error hai
+                    if r.status_code != 200:
+                        is_original_failed = True
+                    else:
+                        # First 1kb data check karo error text ke liye
+                        chunk = next(r.iter_content(1024)).decode('utf-8', errors='ignore')
+                        if "<Error>" in chunk or "AccessDenied" in chunk:
+                            is_original_failed = True
+                    
+                    r.close() # Connection close kar do
+
+                    # Agar original fail ho gaya, toh High quality try karo
+                    if is_original_failed and "." in url:
+                        base, ext = url.rsplit('.', 1)
+                        high_url = f"{base}_high.{ext}"
+                        
+                        # High URL check
+                        r_high = requests.get(high_url, stream=True)
+                        if r_high.status_code == 200:
+                            # High wala valid hai toh URL variable replace kar do
+                            url = high_url
+                            print(f"Original failed, switched to: {url}")
+                        r_high.close()
+
+                except Exception as e:
+                    print(f"Uamedia check error: {e}")
+                    
             if ".pdf*" in url:
                 url = f"https://dragoapi.vercel.app/pdf/{url}"
             
