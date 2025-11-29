@@ -131,20 +131,6 @@ async def set_log_channel_cmd(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"❌ Error: {str(e)}")
 
-# ==============================================================================
-#                 BULK JSON MERGER & CONVERTER (PYROGRAM)
-# ==============================================================================
-# ==============================================================================
-#                 BULK JSON MERGER (IST DATE FIX - COMPLETE)
-# ==============================================================================
-# ==============================================================================
-#                 BULK JSON MERGER (Python 3.6+ Compatible)
-# ==============================================================================
-
-# ==============================================================================
-#                 BULK JSON MERGER (Manual Parsing - 100% Working)
-# ==============================================================================
-
 def format_date(iso_str):
     """
     Input: 2025-06-07T12:30:00+00:00
@@ -256,9 +242,30 @@ def format_date(iso_str):
         
     except Exception as e:
         print(f"Date Parse Error: {e} for input: {iso_str}")
-        import traceback
-        traceback.print_exc()
         return "Invalid Date"
+
+
+def extract_uid_from_filename(filename):
+    """
+    Extract UID and type from filename
+    Examples:
+    - temp_schedule_prashant42jain_batch_XL5F6FW4_1763282373.json -> ("batch", "XL5F6FW4")
+    - schedule_prashant42jain_course_FB16MGWB_1761218350.json -> ("course", "FB16MGWB")
+    """
+    try:
+        # Pattern for batch: _batch_XXXXXXXX_
+        batch_match = re.search(r'_batch_([A-Z0-9]{8})_', filename)
+        if batch_match:
+            return ("batch", batch_match.group(1))
+        
+        # Pattern for course: _course_XXXXXXXX_
+        course_match = re.search(r'_course_([A-Z0-9]{8})_', filename)
+        if course_match:
+            return ("course", course_match.group(1))
+        
+        return (None, None)
+    except:
+        return (None, None)
 
 
 @bot.on_message(filters.command("bulk") & filters.private)
@@ -270,6 +277,7 @@ async def bulk_command(client: Client, message: Message):
         "JSON files bhejo.\n"
         "✅ **Date Format:** 07-June-2025 (06:00PM)\n"
         "✅ **Timezone:** IST (Indian Time)\n"
+        "✅ **Auto UID:** Filename se extract\n"
         "✅ **Sorted:** Date-wise\n"
         "✅ **Merged:** Sequential\n\n"
         "Done ke liye: **/done**"
@@ -315,6 +323,7 @@ async def handle_json_file(client: Client, message: Message):
 
     user_id = message.from_user.id
     document = message.document
+    filename = document.file_name
     caption = message.caption or ""
     
     # Ensure session
@@ -322,29 +331,56 @@ async def handle_json_file(client: Client, message: Message):
         global bulk_sessions
         bulk_sessions = {}
     
-    status_msg = await message.reply_text("⏳ **Converting to IST Format...**")
+    status_msg = await message.reply_text("⏳ **Processing...**")
 
-    # 1. Prefix Extraction
+    # 1. Extract UID from filename
+    uid_type, uid_code = extract_uid_from_filename(filename)
+    
+    # 2. Extract name from caption
     batch_match = re.search(r"Batch Name:\s*(.*)", caption)
     course_match = re.search(r"Course Name:\s*(.*)", caption)
 
+    # 3. Build prefix string
     prefix_str = ""
-    if batch_match:
-        prefix_str = f"🌟𝐁𝐀𝐓𝐂𝐇 ➤ {batch_match.group(1).strip()}🌟"
-    elif course_match:
-        prefix_str = f"🌟𝐂𝐎𝐔𝐑𝐒𝐄 ➤ {course_match.group(1).strip()}🌟"
+    
+    if uid_type == "batch":
+        # Batch detected from filename
+        if batch_match:
+            batch_name = batch_match.group(1).strip()
+        else:
+            batch_name = "Unknown"
+        prefix_str = f"🌟𝐁𝐀𝐓𝐂𝐇 (#{uid_code}) ➤ {batch_name}🌟"
+        
+    elif uid_type == "course":
+        # Course detected from filename
+        if course_match:
+            course_name = course_match.group(1).strip()
+        else:
+            course_name = "Unknown"
+        prefix_str = f"🌟𝐂𝐎𝐔𝐑𝐒𝐄 (#{uid_code}) ➤ {course_name}🌟"
+        
     else:
-        prefix_str = "🌟𝐂𝐎𝐔𝐑𝐒𝐄 ➤ Unknown🌟"
+        # Fallback: use caption only
+        if batch_match:
+            prefix_str = f"🌟𝐁𝐀𝐓𝐂𝐇 ➤ {batch_match.group(1).strip()}🌟"
+        elif course_match:
+            prefix_str = f"🌟𝐂𝐎𝐔𝐑𝐒𝐄 ➤ {course_match.group(1).strip()}🌟"
+        else:
+            prefix_str = "🌟𝐂𝐎𝐔𝐑𝐒𝐄 ➤ Unknown🌟"
+
+    print(f"📁 File: {filename}")
+    print(f"🆔 UID Type: {uid_type}, Code: {uid_code}")
+    print(f"📝 Prefix: {prefix_str}")
 
     input_filename = os.path.join("downloads", f"temp_{user_id}_{document.file_id[:5]}.json")
-
+    
     try:
         await client.download_media(message=document, file_name=input_filename)
 
         with open(input_filename, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        # 2. Internal Sorting (Using ISO date)
+        # 4. Internal Sorting (Using ISO date)
         try:
             data.sort(key=lambda x: x.get('live_at_time') or x.get('live_at', ''))
         except:
@@ -356,28 +392,24 @@ async def handle_json_file(client: Client, message: Message):
             class_url = item.get('class_url', '').strip()
             slides_url = item.get('slides_url', '').strip()
             
-            # 3. Replacement
+            # 5. Replacement
             if class_url == "Class Cancelled": 
                 class_url = "https://optech.jpg"
             if slides_url == "Class Cancelled": 
                 slides_url = "https://optech.jpg"
 
-            # 4. Offline/Online
+            # 6. Offline/Online
             raw_offline = item.get('is_offline', False)
             offline_str = "🌚🟢🌚" if str(raw_offline).strip().lower() == 'true' else "🌚🔴🌚"
 
             class_name = item.get('class_name', 'Unknown Class')
             teacher_name = item.get('teacher_name', 'Unknown Teacher')
             
-            # 5. 🔥 DATE FIX LOGIC (IST CONVERSION) 🔥
+            # 7. 🔥 DATE FIX LOGIC (IST CONVERSION) 🔥
             raw_time = item.get('live_at_time') or item.get('live_at', '')
-            
-            # Convert to readable IST format
             formatted_time = format_date(raw_time)
-            
-            print(f"✅ SUCCESS: {raw_time} => {formatted_time}")
 
-            # 6. Formatting
+            # 8. Formatting
             if class_url:
                 line = f"{prefix_str}{offline_str}{class_name}💀{teacher_name}🤬{formatted_time}🤬 : {class_url}"
                 file_lines.append(line)
@@ -386,11 +418,12 @@ async def handle_json_file(client: Client, message: Message):
                 line = f"{prefix_str}{offline_str}{class_name}💀{teacher_name}🤬{formatted_time}🤬 : {slides_url}"
                 file_lines.append(line)
 
-        # 7. Bulk Decision
+        # 9. Bulk Decision
         if user_id in bulk_sessions:
             bulk_sessions[user_id].extend(file_lines)
             await status_msg.edit(
-                f"📥 **Added:** `{document.file_name}`\n"
+                f"📥 **Added:** `{filename}`\n"
+                f"🆔 **UID:** #{uid_code if uid_code else 'N/A'}\n"
                 f"✅ **Processed:** {len(file_lines)} lines\n"
                 f"🇮🇳 **IST Format Applied**\n\n"
                 f"Aur bhejo ya **/done** dabao."
@@ -401,11 +434,11 @@ async def handle_json_file(client: Client, message: Message):
                 with open(output_filename, 'w', encoding='utf-8') as f:
                     f.write("\n".join(file_lines))
                 
-                final_name = document.file_name.replace('.json', '.txt')
+                final_name = filename.replace('.json', '.txt')
                 await message.reply_document(
                     document=output_filename,
                     file_name=final_name,
-                    caption=f"💀 **Single File Processed**\n🇮🇳 **IST Format Applied**"
+                    caption=f"💀 **Single File Processed**\n🆔 **UID:** #{uid_code if uid_code else 'N/A'}\n🇮🇳 **IST Format Applied**"
                 )
                 if os.path.exists(output_filename):
                     os.remove(output_filename)
@@ -420,8 +453,10 @@ async def handle_json_file(client: Client, message: Message):
     finally:
         if os.path.exists(input_filename):
             os.remove(input_filename)
-
-    
+# ==============================================================================
+#                 BULK JSON MERGER (Manual Parsing - 100% Working)
+# ==============================================================================
+   
 @bot.on_message(filters.command("getlog") & filters.private)
 async def get_log_channel_cmd(client: Client, message: Message):
     """Get current log channel info"""
